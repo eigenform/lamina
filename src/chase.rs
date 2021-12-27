@@ -39,8 +39,10 @@ impl <const SIZE: usize> PointerMaze<SIZE> {
 
     /// Get a pointer to the first entry.
     pub fn head_ptr(&self) -> *const Pointer { &self.data[0] }
+
     /// Get a pointer to the middle entry.
     pub fn mid_ptr(&self) -> *const Pointer { &self.data[SIZE / 2] }
+
     /// Get a pointer to the last entry.
     pub fn tail_ptr(&self) -> *const Pointer { &self.data[SIZE - 1] }
 

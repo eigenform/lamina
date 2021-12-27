@@ -12,6 +12,29 @@ nix = "*"
 [dependencies.iced-x86]
 version = "*"
 
+
+
+# Measuring the reorder buffer with H. Wong's gadget
 [[bin]]
 name = "rob"
 path = "bin/rob.rs"
+
+# Measuring the physical register file with H. Wong's gadget
+[[bin]]
+name = "prf"
+path = "bin/prf.rs"
+
+# Measuring the store queue size with H. Wong's gadget
+[[bin]]
+name = "stq"
+path = "bin/stq.rs"
+
+# Measuring the load queue size with H. Wong's gadget
+[[bin]]
+name = "ldq"
+path = "bin/ldq.rs"
+
+
+#[[bin]]
+#name = "simple"
+#path = "bin/simple.rs"
