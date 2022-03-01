@@ -2,4 +2,14 @@
 Cargo.lock
 scripts/
 data/
+*.o
+*.ko
+*.mod
+*.mod.*
+*.order
+*.symvers
+*.cmd
+*.out
+*.bin
+*.elf
 

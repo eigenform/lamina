@@ -10,7 +10,7 @@
 //!
 //! When calling into emitted code, we follow the SysV ABI (written and tested
 //! only on 64-bit Linux).
-//! 
+//!
 
 use crate::x86::*;
 use dynasmrt::{
@@ -77,7 +77,7 @@ macro_rules! emit_pop_abi_ret { ($asm:ident) => {
     );
 }}
 
-/// Emit a bare loop using some register and the JNE instruction.
+/// Emit a bare loop using some register `$reg` and the JNE instruction.
 #[macro_export]
 macro_rules! emit_loop_reg { 
     ($asm:ident, $reg:tt, $iters:expr, {$($body:tt)*}) => {
