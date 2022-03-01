@@ -34,7 +34,8 @@ long int lamina_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case LAMINA_CMD_WRITECTL:
 		res = copy_from_user(&msg, (struct lamina_msg *)arg, 
-				sizeof(struct lamina_msg));
+				sizeof(struct lamina_msg)
+		);
 		smp_call_function_single(TARGET_CPU, write_pmcs, (void*)&msg, true);
 		break;
 	default:

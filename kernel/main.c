@@ -3,17 +3,9 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/debugfs.h>
-
-#include <linux/slab.h>
-#include <linux/vmalloc.h>
-#include <linux/nmi.h>
-
-
-#include <linux/device.h>
 #include <linux/miscdevice.h>
-
-#include <asm/msr.h>
 #include <asm/processor-flags.h>
+#include <asm/msr.h>
 
 #include "lamina.h"
 #include "fops.h"
@@ -73,10 +65,13 @@ static __init int lamina_init(void)
 		pr_err("lamina: unsupported CPU\n");
 		return -1;
 	}
+
+	// NOTE: Maybe its better to run this on TARGET_CPU ...
 	if (!(native_read_cr4() & X86_CR4_PCE)) {
 		pr_err("lamina: CR4.PCE is unset! - no RDPMC in user-space\n");
 		return -1;
 	}
+
 	if (init_pmcs() != 0) {
 		return -1;
 	}
