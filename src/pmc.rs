@@ -1,22 +1,8 @@
-//! Definitions for performance-monitoring counters (PMCs).
-//!
-//! All of this data has either been recovered through experiment, or pulled
-//! from public datasheets for Family 17h/Family 19h parts.
-//!
-//! ## Munging through AMD publications
-//! If you're thinking about PMCs on Zen machines, you will probably become
-//! confused if you're comparing between PPRs for different processors: 
-//!
-//! - There are weird and incomprehensible omissions of things
-//! - There are changes to names of things without any rationale
-//! - They leave a lot to be desired (many details are simply undefined)
-//!
-//! If you collect enough (see https://www.amd.com/en/support/tech-docs), you
-//! can comb through lots of PDFs at once with one-liners (i.e. I've found
-//! `pdftk` and `pdftotext` are pretty useful for combing through them).
-//!
+
+use crate::event::*;
 
 /// Wrapper type for the set of all PERF_CTL bits (for each counter).
+#[derive(Clone, Copy, Debug)]
 pub struct PerfCtlDescriptor(pub [Option<usize>; 6]);
 impl PerfCtlDescriptor {
     pub fn new() -> Self {
@@ -25,18 +11,38 @@ impl PerfCtlDescriptor {
     pub fn get(&self, idx: usize) -> u64 {
         if let Some(val) = self.0[idx] { val as u64 } else { 0 }
     }
+    pub fn clear_all(&mut self) {
+        self.0 = [None; 6];
+    }
     pub fn clear(&mut self, idx: usize) {
         assert!(idx < 6);
         self.0[idx] = None;
     }
-    pub fn set(&mut self, idx: usize, x: PerfCtl) {
+    pub fn set(mut self, idx: usize, x: PerfCtl) -> Self {
         assert!(idx < 6);
         self.0[idx] = Some(x.0);
+        self
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum HostGuestBits {
+    All       = 0b00,
+    SVMEGuest = 0b01,
+    SVMEHost  = 0b10,
+    SVMEAll   = 0b11,
+}
+#[derive(Clone, Copy, Debug)]
+pub enum OSUserBits {
+    None = 0b00,
+    User = 0b01,
+    OS   = 0b10,
+    All  = 0b11,
 }
 
 /// Wrapper type for a set of PERF_CTL bits.
 #[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
 pub struct PerfCtl(pub usize);
 impl PerfCtl {
 
@@ -126,25 +132,26 @@ impl PerfCtl {
 }
 
 impl PerfCtl {
-    pub fn new(event_mask: u16, count_mask: usize, unit_mask: u8,
-               inv: bool, en: bool, int: bool, edge: bool) -> Self {
+    pub fn new(event: Event, en: bool) -> Self {
         let mut res = Self(0);
-        res.set_hostguest(0b00);
-        res.set_event_select(event_mask);
-        res.set_count_mask(count_mask);
-        res.set_inv(inv);
+        let e = event.convert();
+        res.set_hostguest(HostGuestBits::All);
+        res.set_event_select(e.0);
+        res.set_count_mask(0);
+        res.set_inv(false);
         res.set_en(en);
-        res.set_int(int);
-        res.set_edge(edge);
-        res.set_osuser(0b11);
-        res.set_unit_mask(unit_mask);
+        res.set_int(false);
+        res.set_edge(false);
+        res.set_osuser(OSUserBits::User);
+        res.set_unit_mask(e.1);
         res
     }
+
     pub fn clear(&mut self) { 
         self.0 = 0;
     }
-    pub fn set_hostguest(&mut self, x: usize) {
-        self.0 = (self.0 & !Self::HOSTGUEST_MASK) | (x & 0b11) << 40;
+    pub fn set_hostguest(&mut self, x: HostGuestBits) {
+        self.0 = (self.0 & !Self::HOSTGUEST_MASK) | (x as usize) << 40;
     }
     pub fn set_event_select(&mut self, x: u16) {
         let x = x as usize;
@@ -167,8 +174,8 @@ impl PerfCtl {
     pub fn set_edge(&mut self, x: bool) {
         self.0 = (self.0 & !Self::EDGE_MASK) | (x as usize) << 18
     }
-    pub fn set_osuser(&mut self, x: usize) {
-        self.0 = (self.0 & !Self::OSUSER_MASK) | (x & 0b11) << 16
+    pub fn set_osuser(&mut self, x: OSUserBits) {
+        self.0 = (self.0 & !Self::OSUSER_MASK) | (x as usize) << 16
     }
     pub fn set_unit_mask(&mut self, x: u8) {
         let x = x as usize;
@@ -176,19 +183,19 @@ impl PerfCtl {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::pmc::*;
-    #[test]
-    fn test() {
-        let mut x = PerfCtl(0);
-        x.set_hostguest(0b00);
-        x.set_event_select(0x76);
-        x.set_en(true);
-        x.set_int(true);
-        x.set_osuser(0b11);
-        println!("{:016x}", x.0);
-    }
-}
-
+//#[cfg(test)]
+//mod test {
+//    use crate::pmc::*;
+//    #[test]
+//    fn test() {
+//        let mut x = PerfCtl(0);
+//        x.set_hostguest(0b00);
+//        x.set_event_select(0x76);
+//        x.set_en(true);
+//        x.set_int(true);
+//        x.set_osuser(0b11);
+//        println!("{:016x}", x.0);
+//    }
+//}
+//
 

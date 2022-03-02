@@ -5,6 +5,7 @@ pub mod util;
 pub mod chase;
 pub mod x86;
 pub mod pmc;
+pub mod event;
 
 use std::convert::TryInto;
 use dynasmrt::{ ExecutableBuffer, AssemblyOffset };
@@ -13,52 +14,84 @@ use dynasmrt::{ ExecutableBuffer, AssemblyOffset };
 pub const LAMINA_CHARDEV: &str = "/dev/lamina";
 pub const CMD_WRITECTL: usize = 0x0000_1000;
 
+type Err<T> = Result<T, &'static str>;
+
 /// Set of PERF_CTL values to-be-written by the kernel module.
 #[repr(C)]
 pub struct LaminaMsg { ctl: [u64; 6] }
-impl LaminaMsg {
-    pub fn new(desc: pmc::PerfCtlDescriptor) -> Self { 
-        let mut res = LaminaMsg { ctl: [0; 6] };
-        res.ctl[0] = desc.get(0);
-        res.ctl[1] = desc.get(1);
-        res.ctl[2] = desc.get(2);
-        res.ctl[3] = desc.get(3);
-        res.ctl[4] = desc.get(4);
-        res.ctl[5] = desc.get(5);
-        res
-    }
-}
 
 nix::ioctl_write_ptr_bad! {
     /// Send a set of PERF_CTL values to the kernel module.
     lamina_writectl, CMD_WRITECTL, LaminaMsg
 }
 
-/// Try to get a file descriptor for the lamina character device.
-pub fn lamina_open() -> Result<i32, &'static str> {
-    use nix::sys::stat::Mode;
-    use nix::fcntl::{ open, OFlag };
-    use nix::errno::Errno;
-    match open(LAMINA_CHARDEV, OFlag::O_RDWR, Mode::S_IRWXU) {
-        Ok(fd) => Ok(fd),
-        Err(e) => match e {
-            Errno::ENOENT => Err("Kernel module not loaded?"),
-            Errno::EACCES => Err("Permission denied?"),
-            _ => panic!("unhandled error {}", e),
-        },
+/// Container for the current state of the PMCs.
+pub struct PMCContext {
+    desc: pmc::PerfCtlDescriptor,
+    fd: i32,
+}
+impl PMCContext {
+    pub fn new() -> Err<Self> {
+        use nix::sys::stat::Mode;
+        use nix::fcntl::{ open, OFlag };
+        use nix::errno::Errno;
+
+        let fd = match open(LAMINA_CHARDEV, OFlag::O_RDWR, Mode::S_IRWXU) {
+            Ok(fd) => {
+                Ok(fd)
+            },
+            Err(e) => match e {
+                Errno::ENOENT => Err("Kernel module not loaded?"),
+                Errno::EACCES => Err("Permission denied?"),
+                _ => panic!("unhandled error {}", e),
+            },
+        }?;
+
+        Ok(Self { desc: pmc::PerfCtlDescriptor::new(), fd, })
+    }
+
+    fn do_ioctl(&mut self) -> Err<()> {
+        let mut msg = LaminaMsg { ctl: [0; 6] };
+        for (idx, val) in msg.ctl.iter_mut().enumerate() {
+            *val = self.desc.get(idx);
+        }
+
+        unsafe {
+            match lamina_writectl(self.fd, &msg as *const LaminaMsg) {
+                Ok(res) => {
+                    if res < 0 {
+                        return Err("ioctl() returned non-zero");
+                    }
+                },
+                Err(e) => {
+                    println!("{}", e);
+                    return Err("ioctl() unspecified error");
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn clear(&mut self) -> Err<()> {
+        self.desc.clear_all();
+        self.do_ioctl()
+    }
+    pub fn write(&mut self, d: &pmc::PerfCtlDescriptor) -> Err<()> {
+        self.desc = *d;
+        self.do_ioctl()
+    }
+
+}
+impl std::ops::Drop for PMCContext {
+    fn drop(&mut self) {
+        use nix::unistd::close;
+        self.clear().unwrap();
+        match close(self.fd) {
+            Ok(_) => {},
+            Err(_) => println!("[!] Couldn't close lamina file descriptor?"),
+        }
     }
 }
-
-/// Close the file descriptor bound to the lamina character device.
-pub fn lamina_close(fd: i32) {
-    use nix::unistd::close;
-    match close(fd) {
-        Ok(_) => {},
-        Err(e) => panic!("{}", e),
-    }
-}
-
-
 
 /// Call into a block of emitted code.
 pub fn run_test(buf: &ExecutableBuffer) -> usize {

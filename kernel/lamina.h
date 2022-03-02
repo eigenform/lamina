@@ -8,7 +8,6 @@
 #define LAMINA_CMD_WRITECTL 0x00001000
 
 struct lamina_msg {
-	__u64 mask;
 	__u64 ctl[6];
 };
 

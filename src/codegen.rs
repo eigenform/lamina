@@ -204,4 +204,26 @@ macro_rules! emit_hwong_gadget_test {
     } }
 }
 
+pub fn emit_rdpmc_test(ctr: u32) -> ExecutableBuffer {
+    assert!(ctr < 6);
+    let mut asm = Assembler::<X64Relocation>::new().unwrap();
+    emit_push_abi!(asm);
+    dynasm!(asm
+        ; mov       ecx, ctr as _
+        ; .bytes    RDPMC
+        ; lfence
+        ; shl       rdx, 32
+        ; or        rdx, rax
+        ; sub       r14, rdx
+
+        ; .bytes    RDPMC
+        ; lfence
+        ; shl       rdx, 32
+        ; or        rdx, rax
+        ; add       r14, rdx
+        ; mov       rax, r14
+    );
+    emit_pop_abi_ret!(asm);
+    asm.finalize().unwrap()
+}
 

@@ -3,16 +3,12 @@ name = "lamina"
 version = "0.1.0"
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 dynasmrt = "*"
 nix = "*"
 
 [dependencies.iced-x86]
 version = "*"
-
-
 
 # Measuring the reorder buffer with H. Wong's gadget
 [[bin]]
@@ -35,6 +31,6 @@ name = "ldq"
 path = "bin/ldq.rs"
 
 
-#[[bin]]
-#name = "simple"
-#path = "bin/simple.rs"
+[[bin]]
+name = "pmc"
+path = "bin/pmc.rs"
