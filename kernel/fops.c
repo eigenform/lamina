@@ -14,15 +14,16 @@ void write_pmcs(void* info)
 	struct lamina_msg *msg = info;
 	u64 tmp[6];
 
-	pr_info("lamina: %016llx %016llx %016llx %016llx %016llx %016llx\n",
-			msg->ctl[0], msg->ctl[1], msg->ctl[2], 
-			msg->ctl[3], msg->ctl[4], msg->ctl[5]);
+	//pr_info("lamina: %016llx %016llx %016llx %016llx %016llx %016llx\n",
+	//		msg->ctl[0], msg->ctl[1], msg->ctl[2], 
+	//		msg->ctl[3], msg->ctl[4], msg->ctl[5]);
 
 	// Haven't decided exactly how I want to do this yet:
 	//	- Clear the enable bit on all PERF_CTL registers
 	//	- Clear all of the PERF_CTR registers
 	//	- Write the new set of PERF_CTL registers
 
+	// Read PERF_CTL
 	rdmsrl(0xc0010200, tmp[0]);
 	//rdmsrl(0xc0010202, &tmp[1]);
 	//rdmsrl(0xc0010204, &tmp[2]);
@@ -30,6 +31,7 @@ void write_pmcs(void* info)
 	//rdmsrl(0xc0010208, &tmp[4]);
 	//rdmsrl(0xc001020a, &tmp[5]);
 
+	// Clear enable bit
 	wrmsrl(0xc0010200, tmp[0] & ~(1 << 22));
 	//wrmsrl(0xc0010202, tmp[1] & ~(1 << 22));
 	//wrmsrl(0xc0010204, tmp[2] & ~(1 << 22));
@@ -37,6 +39,7 @@ void write_pmcs(void* info)
 	//wrmsrl(0xc0010208, tmp[4] & ~(1 << 22));
 	//wrmsrl(0xc001020a, tmp[5] & ~(1 << 22));
 
+	// Clear PERF_CTR
 	wrmsrl(0xc0010201, 0);
 	//wrmsrl(0xc0010203, 0);
 	//wrmsrl(0xc0010205, 0);
@@ -44,6 +47,7 @@ void write_pmcs(void* info)
 	//wrmsrl(0xc0010209, 0);
 	//wrmsrl(0xc001020b, 0);
 
+	// Write PERF_CTL
 	wrmsrl(0xc0010200, msg->ctl[0]);
 	//wrmsrl(0xc0010202, msg->ctl[1]);
 	//wrmsrl(0xc0010204, msg->ctl[2]);

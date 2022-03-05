@@ -6,10 +6,10 @@
 //! ## Compatibility
 //! The behavior of some of the assembly here might depend on the way that
 //! the Zen 2 microarchitecture is implemented (written and tested only on
-//! a Ryzen 9 3950X). You might also see AMD-specific instructions.
+//! a Ryzen 7 3950X). You might also see AMD-specific instructions.
 //!
-//! When calling into emitted code, we follow the SysV ABI (written and tested
-//! only on 64-bit Linux).
+//! When calling into emitted code, we follow the SysV ABI: this code was
+//! written and tested solely for 64-bit Linux machines.
 //!
 
 use crate::x86::*;
@@ -55,6 +55,7 @@ macro_rules! emit_push_abi { ($asm:ident) => {
         ; xor       r13, r13
         ; xor       r14, r14
         ; xor       r15, r15
+        ; mfence
         ; lfence
     );
 }}
@@ -204,26 +205,86 @@ macro_rules! emit_hwong_gadget_test {
     } }
 }
 
-pub fn emit_rdpmc_test(ctr: u32) -> ExecutableBuffer {
-    assert!(ctr < 6);
-    let mut asm = Assembler::<X64Relocation>::new().unwrap();
-    emit_push_abi!(asm);
-    dynasm!(asm
-        ; mov       ecx, ctr as _
-        ; .bytes    RDPMC
-        ; lfence
-        ; shl       rdx, 32
-        ; or        rdx, rax
-        ; sub       r14, rdx
+#[macro_export]
+macro_rules! emit_rdpmc_test {
+    ($ctr:expr, $($body:tt)*) => { {
+        assert!($ctr < 6);
+        let mut asm = Assembler::<X64Relocation>::new().unwrap();
+        emit_push_abi!(asm);
+        dynasm!(asm
+            ; mov       ecx, $ctr as _
+            ; lfence
+            ; rdpmc
+            ; lfence
 
-        ; .bytes    RDPMC
-        ; lfence
-        ; shl       rdx, 32
-        ; or        rdx, rax
-        ; add       r14, rdx
-        ; mov       rax, r14
-    );
-    emit_pop_abi_ret!(asm);
-    asm.finalize().unwrap()
+            // Use only low 32 bits from counter
+            ; sub r14, rax
+            // Use all 64 bits from counter
+            //; shl       rdx, 32
+            //; or        rdx, rax
+            //; sub       r14, rdx
+
+            $($body)*
+
+            ; mov       ecx, $ctr as _
+            ; lfence
+            ; rdpmc
+            ; lfence
+
+            // Use only low 32 bits from counter
+            ; add r14, rax
+            ; mov rax, r14
+            // Use all 64 bits from counter
+            //; shl       rdx, 32
+            //; or        rdx, rax
+            //; add       r14, rdx
+            //; mov       rax, r14
+
+            ; mfence
+        );
+        emit_pop_abi_ret!(asm);
+        asm.finalize().unwrap()
+    } }
 }
+
+/// Gadget for creating a speculated branch.
+///
+/// ## Prior Art
+/// This setup is more-or-less analogous to the one that Can Bölük discusses
+/// in this project[^1] and article[^2] about examining undefined x86_64 
+/// instructions with speculation and PMCs.
+///
+/// [^1]: github.com/can1357/haruspex
+/// [^2]: blog.can.ac/2021/03/22/speculating-x86-64-isa-with-one-weird-trick/
+///
+#[macro_export]
+macro_rules! emit_cboluk_gadget {
+    ($asm:ident, speculate($($speculate:tt)*), busy($($busy:tt)*)) => {
+        dynasm!($asm,
+            ; .align 64
+            ; call ->func
+
+            // Instructions in this block are only executed speculatively;
+            // returns from the preceeding CALL should never reach here.
+            $($speculate)*
+
+            // Do something to waste cycles (might not be necessary).
+            ; .align 64
+            ; ->func:
+            $($busy)*
+
+            // Fixup the return address, orphaning the speculate() block.
+            // Note that XCHG and SFENCE seem *necessary* here. 
+            ; lea rax, [->end]
+            ; xchg [rsp], rax
+            ; sfence
+            ; ret
+
+            // Actual return address.
+            ; .align 64
+            ; ->end:
+        );
+    }
+}
+
 

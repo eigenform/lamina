@@ -93,6 +93,58 @@ impl std::ops::Drop for PMCContext {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TestResults {
+    pub min: usize,
+    pub max: usize,
+}
+impl std::ops::Sub for TestResults {
+    type Output = Self;
+    fn sub(self, rhs: Self) -> Self::Output {
+        TestResults {
+            min: self.min - rhs.min,
+            max: self.max - rhs.max
+        }
+    }
+}
+
+/// Wrapper around a function pointer for emitted code.
+///
+/// NOTE: You'll want to fix this up later to deal with multiple counters.
+pub struct TestFunc{ 
+    size: usize,
+    ptr:  *const u8,
+    func: extern "C" fn() -> usize,
+}
+impl TestFunc {
+    pub fn new(buf: &ExecutableBuffer) -> Self {
+        let ptr: *const u8 = buf.ptr(AssemblyOffset(0));
+        unsafe {
+            Self { 
+                ptr,
+                size: buf.len(),
+                func: std::mem::transmute(ptr),
+            }
+        }
+    }
+
+    /// Run the emitted code once.
+    pub fn run_once(&self) -> usize { (self.func)() }
+
+    /// Run emitted code some number of times.
+    pub fn run_iter(&self, iter: usize) -> TestResults {
+        let mut res = vec![0; iter];
+        for i in 0..iter { 
+            crate::util::clflush(self.size, self.ptr as *const [u8; 64]);
+            res[i] = (self.func)();
+        }
+        TestResults {
+            min: *res.iter().min().unwrap(),
+            max: *res.iter().max().unwrap(),
+        }
+    }
+}
+
 /// Call into a block of emitted code.
 pub fn run_test(buf: &ExecutableBuffer) -> usize {
     let ptr: *const u8 = buf.ptr(AssemblyOffset(0));

@@ -4,12 +4,51 @@ use iced_x86::{
     Decoder, DecoderOptions, Instruction, Formatter, IntelFormatter 
 };
 
+/// Wrapper around `CLFLUSH`.
+pub fn clflush(len: usize, p: *const [u8; 64]) {
+    use std::convert::TryInto;
+    unsafe { 
+        for idx in 0..(len / 64) + 1 {
+            core::arch::x86_64::_mm_clflush(
+                p.offset(idx.try_into().unwrap()) as *const u8
+            )
+        }
+        core::arch::x86_64::_mm_mfence();
+    }
+}
+
+
 /// Pin the current process to a particular core.
 pub fn pin_to_core(core_id: usize) {
     let mut cpuset = nix::sched::CpuSet::new();
     let this_pid = nix::unistd::Pid::from_raw(0);
     cpuset.set(core_id).unwrap();
     nix::sched::sched_setaffinity(this_pid, &cpuset).unwrap();
+}
+
+pub fn disas_inst(buf: &[u8]) -> String {
+    let mut decoder = Decoder::with_ip(64, buf, 0, DecoderOptions::NONE);
+    let mut formatter = IntelFormatter::new();
+    formatter.options_mut().set_digit_separator("_");
+    formatter.options_mut().first_operand_char_index();
+    let mut output = String::new();
+    let mut bytestr = String::new();
+    let mut instr  = Instruction::default();
+    while decoder.can_decode() {
+        decoder.decode_out(&mut instr);
+        output.clear();
+        formatter.format(&instr, &mut output);
+
+        let start_idx = (instr.ip() & 0xfff) as usize;
+        let instr_bytes = &buf[start_idx..start_idx + instr.len()];
+        for b in instr_bytes.iter() {
+            bytestr.push_str(&format!("{:02x}", b));
+        }
+        break;
+    }
+    let res = format!("{:<8} {:<32}", bytestr, output);
+    return res;
+
 }
 
 /// Print the disassembly for a particular [ExecutableBuffer].
