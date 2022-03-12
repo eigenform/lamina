@@ -3,12 +3,6 @@ use lamina::x86::*;
 use lamina::util::*;
 use lamina::chase::*;
 
-use dynasmrt::{
-    dynasm, DynasmApi, DynasmLabelApi, 
-    Assembler, AssemblyOffset, ExecutableBuffer, 
-    x64::X64Relocation
-};
-
 /// The number of measurements taken per-test.
 const SAMPLES: usize = 1024;
 
@@ -30,7 +24,7 @@ fn main() {
 
     let ptr_a = mem.head_ptr() as *const usize;
     let ptr_b = mem.mid_ptr() as *const usize;
-    let r15_ptr = val.as_ptr() as *const usize;
+    let r15_ptr = val.as_mut_ptr() as *const usize;
 
     for num_pad in 0..=64 {
         mem.flush();
@@ -46,7 +40,7 @@ fn main() {
         );
 
         for i in 0..SAMPLES {
-            res[i] = run_test(&test);
+            res[i] = run_simple_test(&test);
         }
 
         let min = *res.iter().min().unwrap() as f64

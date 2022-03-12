@@ -30,7 +30,14 @@ path = "bin/stq.rs"
 name = "ldq"
 path = "bin/ldq.rs"
 
-
+# Measuring a single speculative events with PMCs
 [[bin]]
-name = "pmc"
-path = "bin/pmc.rs"
+name = "spec_rdtsc_example"
+path = "bin/pmc/spec_rdtsc_example.rs"
+
+# Measuring up to six events with PMCs
+[[bin]]
+name = "rdpmc_example"
+path = "bin/pmc/rdpmc_example.rs"
+
+

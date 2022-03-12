@@ -1,3 +1,4 @@
+//! Miscellaneous helper functions.
 
 use dynasmrt::{ ExecutableBuffer, AssemblyOffset };
 use iced_x86::{ 
@@ -30,7 +31,7 @@ pub fn disas_inst(buf: &[u8]) -> String {
     let mut decoder = Decoder::with_ip(64, buf, 0, DecoderOptions::NONE);
     let mut formatter = IntelFormatter::new();
     formatter.options_mut().set_digit_separator("_");
-    formatter.options_mut().first_operand_char_index();
+    let _ = formatter.options_mut().first_operand_char_index();
     let mut output = String::new();
     let mut bytestr = String::new();
     let mut instr  = Instruction::default();
@@ -60,7 +61,7 @@ pub fn disas(buf: &ExecutableBuffer) {
     let mut decoder = Decoder::with_ip(64, buf, addr, DecoderOptions::NONE);
     let mut formatter = IntelFormatter::new();
     formatter.options_mut().set_digit_separator("_");
-    formatter.options_mut().first_operand_char_index();
+    let _ = formatter.options_mut().first_operand_char_index();
     let mut output = String::new();
     let mut instr  = Instruction::default();
 

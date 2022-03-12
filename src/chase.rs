@@ -1,8 +1,7 @@
-/// Structures for deliberate pointer-chasing.
-///
-/// [PointerMaze::shuffle] is an implementation of [Sattolo's
-/// algorithm](https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle).
-///
+//! Structures for deliberate pointer-chasing.
+//!
+//! [PointerMaze::shuffle] is an implementation of [Sattolo's
+//! algorithm](https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle).
 
 use std::convert::TryInto;
 use crate::util::*;

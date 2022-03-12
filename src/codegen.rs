@@ -1,34 +1,41 @@
 //! Macros for generating different microbenchmarks at runtime.
 //!
-//! These are mostly all wrappers around [dynasm] macros, used for easily 
-//! parameterizing different kinds of gadgets/idioms in assembly.
+//! These are mostly all wrappers around the [dynasmrt::dynasm] macro, used 
+//! for easily parameterizing different kinds of gadgets/idioms in assembly.
 //!
-//! ## Compatibility
+//! ## Safety
+//!
+//! Because a lot of logic is wrapped up in macros (allowing you to insert
+//! code into templates fairly-easily), many of the guarantees about safety
+//! here are based only on convention. You may want to read some of this code
+//! before you use it.
+//!
+//! ## Notes on Compatibility
+//!
+//! - This library was written and tested on a Ryzen 7 3950X machine.
+//! - This library is only intended for 64-bit Linux machines.
+//!
+//! When calling into emitted code, we follow the SysV ABI. 
 //! The behavior of some of the assembly here might depend on the way that
-//! the Zen 2 microarchitecture is implemented (written and tested only on
-//! a Ryzen 7 3950X). You might also see AMD-specific instructions.
-//!
-//! When calling into emitted code, we follow the SysV ABI: this code was
-//! written and tested solely for 64-bit Linux machines.
+//! the Zen 2 microarchitecture is implemented. Any compatibility with other
+//! machines is *not expected* and *not guaranteed*.
 //!
 
-use crate::x86::*;
-use dynasmrt::{
-    dynasm, DynasmApi, DynasmLabelApi, 
-    Assembler, AssemblyOffset, ExecutableBuffer, 
-    x64::X64Relocation
-};
 
-/// Common prologue for emitted code, clearing all of the general-purpose 
-/// registers (with the exception of RSP).
+/// Common prologue for emitted code. 
 ///
-/// NOTE: Stack usage in emitted code is unsupported right now (for no reason 
-/// in particular).
+/// Pushes the SysV ABI callee-save registers onto the stack.
+/// Clears all of the general-purpose registers (with the exception of RSP).
+///
+/// ## Safety
+///
+/// Right now, stack usage in emitted code is unsupported.
+/// At some point, we can probably have some way to switch into a new stack.
+///
 #[macro_export]
 macro_rules! emit_push_abi { ($asm:ident) => {
     dynasm!($asm
         ; .arch     x64
-        // Callee-save registers (in the SysV ABI)
         ; push      rbp
         ; push      rbx
         ; push      rdi
@@ -39,7 +46,7 @@ macro_rules! emit_push_abi { ($asm:ident) => {
         ; push      r15
         ; mfence
         ; lfence
-        // Clear all of the general-purpose registers
+
         ; xor       rax, rax
         ; xor       rbx, rbx
         ; xor       rcx, rcx
@@ -61,10 +68,10 @@ macro_rules! emit_push_abi { ($asm:ident) => {
 }}
 
 /// Common epilogue for emitted code.
+/// Pops the SysV ABI callee-save registers from the stack.
 #[macro_export]
 macro_rules! emit_pop_abi_ret { ($asm:ident) => {
     dynasm!($asm
-        // Callee-save registers (in the SysV ABI)
         ; pop       r15
         ; pop       r14
         ; pop       r13
@@ -78,7 +85,7 @@ macro_rules! emit_pop_abi_ret { ($asm:ident) => {
     );
 }}
 
-/// Emit a bare loop using some register `$reg` and the JNE instruction.
+/// Emit a bare loop using some register and the JNE instruction.
 #[macro_export]
 macro_rules! emit_loop_reg { 
     ($asm:ident, $reg:tt, $iters:expr, {$($body:tt)*}) => {
@@ -112,39 +119,6 @@ macro_rules! emit_rdpru_rdx { ($asm:ident, $($tail:tt)*) => {
         $($tail)*
     );
 }}
-
-
-#[macro_export]
-macro_rules! emit_simple_loop_test {
-    ($iters:expr, $ptr:ident,
-     head($($head:tt)*), 
-     body($rept:expr, $($body:tt)*),
-     tail($($tail:tt)*)
-     ) => {{
-        let mut asm = Assembler::<X64Relocation>::new().unwrap();
-        emit_push_abi!(asm);
-        dynasm!(asm
-            ; xor r14, r14
-            ; mov r15, QWORD $ptr as _
-        );
-
-        emit_rdpru_rdx!(asm, ; sub r14, rdx);
-
-        emit_loop_reg!(asm, rdx, $iters, {
-            dynasm!(asm $($head)*);
-            for _ in 0..$rept {
-                dynasm!(asm $($body)*);
-            }
-            dynasm!(asm $($tail)*);
-        });
-
-        emit_rdpru_rdx!(asm, ; add r14, rdx; mov rax, r14);
-
-        emit_pop_abi_ret!(asm);
-        asm.finalize().unwrap()
-    }}
-}
-
 
 /// Generator for variations on Henry Wong's gadget for measuring reorder 
 /// buffer capacity. 
@@ -205,48 +179,6 @@ macro_rules! emit_hwong_gadget_test {
     } }
 }
 
-#[macro_export]
-macro_rules! emit_rdpmc_test {
-    ($ctr:expr, $($body:tt)*) => { {
-        assert!($ctr < 6);
-        let mut asm = Assembler::<X64Relocation>::new().unwrap();
-        emit_push_abi!(asm);
-        dynasm!(asm
-            ; mov       ecx, $ctr as _
-            ; lfence
-            ; rdpmc
-            ; lfence
-
-            // Use only low 32 bits from counter
-            ; sub r14, rax
-            // Use all 64 bits from counter
-            //; shl       rdx, 32
-            //; or        rdx, rax
-            //; sub       r14, rdx
-
-            $($body)*
-
-            ; mov       ecx, $ctr as _
-            ; lfence
-            ; rdpmc
-            ; lfence
-
-            // Use only low 32 bits from counter
-            ; add r14, rax
-            ; mov rax, r14
-            // Use all 64 bits from counter
-            //; shl       rdx, 32
-            //; or        rdx, rax
-            //; add       r14, rdx
-            //; mov       rax, r14
-
-            ; mfence
-        );
-        emit_pop_abi_ret!(asm);
-        asm.finalize().unwrap()
-    } }
-}
-
 /// Gadget for creating a speculated branch.
 ///
 /// ## Prior Art
@@ -285,6 +217,132 @@ macro_rules! emit_cboluk_gadget {
             ; ->end:
         );
     }
+}
+
+
+/// Emit a test utilizing all six PMC registers to capture some result data.
+///
+/// ## Conventions
+/// r15 is reserved for a pointer to the set of results.
+/// r14, r13, r12, r11, r10, and r9 are reserved for RDPMC results.
+///
+#[macro_export]
+macro_rules! emit_rdpmc_test_all {
+    ($($body:tt)*) => { {
+        let mut asm = Assembler::<X64Relocation>::new().unwrap();
+        dynasm!(asm
+            ; .arch     x64
+            ; push      rbp
+            ; push      rbx
+            ; push      rdi
+            ; push      rsi
+            ; push      r12
+            ; push      r13
+            ; push      r14
+            ; push      r15
+            ; mfence
+            ; lfence
+
+            ; mov       r15, rdi
+            ; xor       rax, rax
+            ; xor       rbx, rbx
+            ; xor       rcx, rcx
+            ; xor       rdx, rdx
+            ; xor       rsi, rsi
+            ; xor       rdi, rdi
+            ; xor       rbp, rbp
+            ; xor        r8, r8
+            ; xor        r9, r9
+            ; xor       r10, r10
+            ; xor       r11, r11
+            ; xor       r12, r12
+            ; xor       r13, r13
+            ; xor       r14, r14
+            //; xor       r15, r15
+            ; mfence
+            ; lfence
+        );
+
+        // Take some measurements
+        dynasm!(asm
+            ; mov rcx, 5 ; lfence ; rdpmc ; lfence ; sub r14, rax
+            ; mov rcx, 4 ; lfence ; rdpmc ; lfence ; sub r13, rax
+            ; mov rcx, 3 ; lfence ; rdpmc ; lfence ; sub r12, rax
+            ; mov rcx, 2 ; lfence ; rdpmc ; lfence ; sub r11, rax
+            ; mov rcx, 1 ; lfence ; rdpmc ; lfence ; sub r10, rax
+            ; mov rcx, 0 ; lfence ; rdpmc ; lfence ; sub  r9, rax
+        );
+
+        // Do something
+        $($body)*
+
+        // Take another set of measurements and compute the difference
+        dynasm!(asm
+            ; mov rcx, 0 ; lfence ; rdpmc ; lfence ; add  r9, rax
+            ; mov rcx, 1 ; lfence ; rdpmc ; lfence ; add r10, rax
+            ; mov rcx, 2 ; lfence ; rdpmc ; lfence ; add r11, rax
+            ; mov rcx, 3 ; lfence ; rdpmc ; lfence ; add r12, rax
+            ; mov rcx, 4 ; lfence ; rdpmc ; lfence ; add r13, rax
+            ; mov rcx, 5 ; lfence ; rdpmc ; lfence ; add r14, rax
+        );
+
+        // Write the results back to memory
+        dynasm!(asm
+            ; mov [r15 + 0x00], r9
+            ; mov [r15 + 0x08], r10
+            ; mov [r15 + 0x10], r11
+            ; mov [r15 + 0x18], r12
+            ; mov [r15 + 0x20], r13
+            ; mov [r15 + 0x28], r14
+        );
+
+        dynasm!(asm
+            ; pop r15
+            ; pop r14
+            ; pop r13
+            ; pop r12
+            ; pop rsi
+            ; pop rdi
+            ; pop rbx
+            ; pop rbp
+            ; mfence
+            ; ret
+            ; lfence
+        );
+        asm.finalize().unwrap()
+    } }
+}
+
+
+/// Emit a test utilizing a single counter to capture a single event.
+///
+/// Returns the difference (number of events counted) in RAX.
+#[macro_export]
+macro_rules! emit_rdpmc_test_single {
+    ($ctr:expr, $($body:tt)*) => { {
+        assert!($ctr < 6);
+        let mut asm = Assembler::<X64Relocation>::new().unwrap();
+        emit_push_abi!(asm);
+        dynasm!(asm
+            ; mov       ecx, $ctr as _
+            ; lfence
+            ; rdpmc
+            ; lfence
+            ; sub r15, rax
+
+            $($body)*
+
+            ; mov       ecx, $ctr as _
+            ; lfence
+            ; rdpmc
+            ; lfence
+            ; add r15, rax
+            ; mov rax, r15
+            ; mfence
+        );
+        emit_pop_abi_ret!(asm);
+        asm.finalize().unwrap()
+    } }
 }
 
 

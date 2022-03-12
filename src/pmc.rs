@@ -1,30 +1,50 @@
+//! Definitions and wrapper types for dealing with MSRs associated with PMCs.
+//!
+//! The [PerfCtl] type is used to create a valid value for a particular 
+//! `PERF_CTL` MSR. [PerfCtlDescriptor] represents a set of all six `PERF_CTL`
+//! MSR values at some instant.
 
 use crate::event::*;
 
-/// Wrapper type for the set of all PERF_CTL bits (for each counter).
+/// Wrapper type for the set of all `PERF_CTL` bits.
 #[derive(Clone, Copy, Debug)]
-pub struct PerfCtlDescriptor(pub [Option<usize>; 6]);
+pub struct PerfCtlDescriptor {
+    pub events: [Option<Event>; 6],
+    pub ctl: [Option<PerfCtl>; 6],
+}
 impl PerfCtlDescriptor {
-    pub fn new() -> Self {
-        Self([None; 6])
+    /// Create a new, empty [PerfCtlDescriptor].
+    pub fn new() -> Self { 
+        Self {
+            events: [None; 6],
+            ctl: [None; 6],
+        }
     }
+    /// Clear all entries.
+    pub fn clear_all(&mut self) { 
+        self.events = [None; 6]; 
+        self.ctl = [None; 6]; 
+    }
+    /// Return the 64-bit `PERF_CTL` value for this entry.
     pub fn get(&self, idx: usize) -> u64 {
-        if let Some(val) = self.0[idx] { val as u64 } else { 0 }
+        if let Some(ctl) = self.ctl[idx] { ctl.0 as u64 } else { 0 }
     }
-    pub fn clear_all(&mut self) {
-        self.0 = [None; 6];
-    }
+    /// Clear (zero out) a particular entry.
     pub fn clear(&mut self, idx: usize) {
         assert!(idx < 6);
-        self.0[idx] = None;
+        self.ctl[idx] = None;
+        self.events[idx] = None;
     }
-    pub fn set(mut self, idx: usize, x: PerfCtl) -> Self {
+    /// Set a particular entry.
+    pub fn set(mut self, idx: usize, e: Event) -> Self {
         assert!(idx < 6);
-        self.0[idx] = Some(x.0);
+        self.ctl[idx] = Some(PerfCtl::new(e, true));
+        self.events[idx] = Some(e);
         self
     }
 }
 
+/// Representing the host/guest field in a [PerfCtl] register.
 #[derive(Clone, Copy, Debug)]
 pub enum HostGuestBits {
     All       = 0b00,
@@ -32,6 +52,7 @@ pub enum HostGuestBits {
     SVMEHost  = 0b10,
     SVMEAll   = 0b11,
 }
+/// Representing the OS/user field in a [PerfCtl] register.
 #[derive(Clone, Copy, Debug)]
 pub enum OSUserBits {
     None = 0b00,
@@ -40,16 +61,22 @@ pub enum OSUserBits {
     All  = 0b11,
 }
 
-/// Wrapper type for a set of PERF_CTL bits.
+/// Wrapper type for the value of a `PERF_CTL` MSR.
 #[repr(transparent)]
 #[derive(Clone, Copy, Debug)]
 pub struct PerfCtl(pub usize);
 impl PerfCtl {
 
-//       41
-//        v
-//        hh rrrr eeee cccccccc v e r i r g oo mmmmmmmm eeeeeeee
-//      0b00_0000_0000_00000000_0_0_0_0_0_0_00_00000000_00000000
+    // Quick visual reference for different fields in `PERF_CTL`.
+    //
+    // NOTE: Events are 12-bits, but honestly, I wouldn't be suprised if those 
+    // high reserved bits are the high 4-bits of a *16-bit* space of events.
+    // You can experiment with reserved bits when you're feeling brave enough.
+    // 
+    //   41                                                    0
+    //    v                                                    v
+    //    hh rrrr eeee cccccccc v n r i r g oo mmmmmmmm eeeeeeee
+    //  0b00_0000_0000_00000000_0_0_0_0_0_0_00_00000000_00000000
 
     // "Count only host/guest events"
     pub const HOSTGUEST_MASK: usize = {
@@ -101,37 +128,32 @@ impl PerfCtl {
         0b00_0000_0000_00000000_0_0_0_0_0_0_00_00000000_11111111
     };
 
-    pub fn hostguest(&self) -> usize { 
-        (self.0 & Self::HOSTGUEST_MASK) >> 40 
-    }
+    pub fn hostguest(&self) -> usize { (self.0 & Self::HOSTGUEST_MASK) >> 40 }
     pub fn event_select(&self) -> usize { 
           (self.0 & Self::EVTSEL_HI_MASK) >> 24 
         | (self.0 & Self::EVTSEL_LO_MASK)
     }
-    pub fn count_mask(&self) -> usize { 
-        (self.0 & Self::CNTMASK_MASK) >> 24 
-    }
-    pub fn inv(&self) -> bool { 
-        (self.0 & Self::INV_MASK) != 0 
-    }
-    pub fn en(&self) -> bool { 
-        (self.0 & Self::EN_MASK) != 0 
-    }
-    pub fn int(&self) -> bool { 
-        (self.0 & Self::INT_MASK) != 0 
-    }
-    pub fn edge(&self) -> bool { 
-        (self.0 & Self::EDGE_MASK) != 0 
-    }
-    pub fn osuser(&self) -> usize { 
-        (self.0 & Self::OSUSER_MASK) >> 16 
-    }
-    pub fn unit_mask(&self) -> usize { 
-        (self.0 & Self::UNITMASK_MASK) >> 8 
-    }
+    pub fn count_mask(&self) -> usize { (self.0 & Self::CNTMASK_MASK) >> 24 }
+    pub fn inv(&self) -> bool { (self.0 & Self::INV_MASK) != 0 }
+    pub fn en(&self) -> bool { (self.0 & Self::EN_MASK) != 0 }
+    pub fn int(&self) -> bool { (self.0 & Self::INT_MASK) != 0 }
+    pub fn edge(&self) -> bool { (self.0 & Self::EDGE_MASK) != 0 }
+    pub fn osuser(&self) -> usize { (self.0 & Self::OSUSER_MASK) >> 16 }
+    pub fn unit_mask(&self) -> usize { (self.0 & Self::UNITMASK_MASK) >> 8 }
 }
 
 impl PerfCtl {
+
+    /// Create a new `PERF_CTL` value.
+    ///
+    /// ## Defaults
+    /// These are essentially commands to the PMC interface. 
+    /// The default settings for these are as follows:
+    ///
+    /// - Only count events from userspace
+    /// - Do *not* fire interrupts 
+    /// - Don't worry about SVM-related bits or counter-overflow behavior
+    ///
     pub fn new(event: Event, en: bool) -> Self {
         let mut res = Self(0);
         let e = event.convert();
@@ -156,8 +178,7 @@ impl PerfCtl {
     pub fn set_event_select(&mut self, x: u16) {
         let x = x as usize;
         self.0 = (self.0 & !(Self::EVTSEL_HI_MASK|Self::EVTSEL_LO_MASK)) 
-            | (x & 0b1111_00000000) << 24
-            | (x & 0b0000_11111111);
+            | (x & 0b1111_00000000) << 24 | (x & 0b0000_11111111);
     }
     pub fn set_count_mask(&mut self, x: usize) {
         self.0 = (self.0 & !Self::CNTMASK_MASK) | (x & 0b11111111) << 24
@@ -182,20 +203,4 @@ impl PerfCtl {
         self.0 = (self.0 & !Self::UNITMASK_MASK) | (x & 0b11111111) << 8
     }
 }
-
-//#[cfg(test)]
-//mod test {
-//    use crate::pmc::*;
-//    #[test]
-//    fn test() {
-//        let mut x = PerfCtl(0);
-//        x.set_hostguest(0b00);
-//        x.set_event_select(0x76);
-//        x.set_en(true);
-//        x.set_int(true);
-//        x.set_osuser(0b11);
-//        println!("{:016x}", x.0);
-//    }
-//}
-//
 

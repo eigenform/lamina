@@ -69,12 +69,6 @@ use lamina::x86::*;
 use lamina::util::*;
 use lamina::chase::*;
 
-use dynasmrt::{
-    dynasm, DynasmApi, DynasmLabelApi, 
-    Assembler, AssemblyOffset, ExecutableBuffer, 
-    x64::X64Relocation
-};
-
 /// The number of measurements taken per-test.
 const SAMPLES: usize = 512;
 
@@ -119,7 +113,7 @@ fn main() {
         );
 
         for i in 0..SAMPLES {
-            res[i] = run_test(&test);
+            res[i] = run_simple_test(&test);
         }
 
         let min = *res.iter().min().unwrap() as f64
