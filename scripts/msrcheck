@@ -1,0 +1,11 @@
+#!/bin/bash
+
+if [[ $EUID != 0 ]]; then echo "Must be root"; exit -1; fi
+
+rdmsr 0xc0010200
+rdmsr 0xc0010202
+rdmsr 0xc0010204
+rdmsr 0xc0010206
+rdmsr 0xc0010208
+rdmsr 0xc001020a
+

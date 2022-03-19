@@ -1,0 +1,41 @@
+#!/bin/bash
+
+# This script toggles various system settings, in order to [try to] control 
+# some variables that might interact with tests. 
+#
+# Assumptions:
+#  - Assume that all tests will be running on core 0
+#  - Assume 'schedutil' is the default governor for core 0
+#
+# Changes:
+#  - Disable the kernel NMI watchdog 
+#  - Disable simultaneous multithreading (SMT) 
+#  - Disable cpufreq frequency boosting
+#  - Set the cpufreq governor to 'performance' (nominal frequency)
+#  - Enable use of RDPMC
+
+if [[ -z $1 ]]; then echo "usage: $0 [enable|disable]"; exit -1; fi
+if [[ $EUID != 0 ]]; then echo "Must be root"; exit -1; fi
+
+SMT_CTRL=/sys/devices/system/cpu/smt/control
+NMI_CTRL=/proc/sys/kernel/nmi_watchdog
+BOOST_CTRL=/sys/devices/system/cpu/cpufreq/boost
+GOV_CTRL=/sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+RDPMC_CTRL=/sys/bus/event_source/devices/cpu/rdpmc
+
+if [[ ${1} == "enable" ]]; then 
+	echo "off" > ${SMT_CTRL}
+	echo 0 > ${BOOST_CTRL}
+	echo 0 > ${NMI_CTRL}
+	echo 'performance' > ${GOV_CTRL}
+	echo 2 > ${RDPMC_CTRL}
+elif [[ ${1} == "disable" ]]; then 
+	echo "on" > ${SMT_CTRL}
+	echo 1 > ${BOOST_CTRL}
+	echo 1 > ${NMI_CTRL}
+	echo 'schedutil' > ${GOV_CTRL}
+	echo 1 > ${RDPMC_CTRL}
+else
+	echo "usage: $0 [off|on]"
+	exit -1
+fi
