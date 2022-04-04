@@ -38,7 +38,16 @@ impl PerfCtlDescriptor {
     /// Set a particular entry.
     pub fn set(mut self, idx: usize, e: Event) -> Self {
         assert!(idx < 6);
-        self.ctl[idx] = Some(PerfCtl::new(e, true));
+
+        if e == Event::Merge {
+            // NOTE: Eventually I'll test this to see what happens
+            if (idx & 1) == 0 {
+                panic!("Merge behavior undefined for even-numbered counters");
+            }
+            self.ctl[idx] = Some(PerfCtl::new_merge(true));
+        } else {
+            self.ctl[idx] = Some(PerfCtl::new(e, true));
+        }
         self.events[idx] = Some(e);
         self
     }
@@ -168,8 +177,12 @@ impl PerfCtl {
         res.set_unit_mask(e.1);
         res
     }
+
+    /// Create a new `PERF_CTL` value for a merge event.
+    /// All bits are unset except for 'en' and the event select.
     pub fn new_merge(en: bool) -> Self {
         let mut res = Self(0);
+        res.set_event_select(Event::convert(&Event::Merge).0);
         res.set_en(en);
         res
     }

@@ -26,9 +26,7 @@ fn main() -> Result<(), &'static str> {
     let mut scratch = Box::new([0u8; 64]);
     let scratch_ptr = scratch.as_ptr();
 
-    // Get the floor/number of ambient events for emit_rdpmc_test_single!() 
-    // gadget. 
-    //
+    // Get the number of ambient events for emit_rdpmc_test_single!().
     // You should see no LsRdTsc events.
     let test = emit_rdpmc_test_single!(0, );
     let mut res = Vec::new();
@@ -38,11 +36,8 @@ fn main() -> Result<(), &'static str> {
     let res = minmax(&res);
     println!("floor      min={} max={}", res.0, res.1);
 
-    // Run a test where RDTSC is executed speculatively (Zen 2 machines
-    // speculate past unconditional direct branches under particular).
-    //
+    // Run a test where RDTSC is executed speculatively.
     // You should see at most 1 LsRdTsc event. 
-    //
     let test = emit_rdpmc_test_single!(0, 
         ; mov rdi, QWORD scratch_ptr as _
         ; call ->func
@@ -68,18 +63,8 @@ fn main() -> Result<(), &'static str> {
     let res = minmax(&res);
     println!("spec_rdtsc min={} max={}", res.0, res.1);
 
-
     // Run a test where a #UD stops speculation before reaching RDTSC.
     // You should see no LsRdTsc events.
-    //
-    // See "Speculation Behavior in AMD Micro-Architectures":
-    //
-    // > Some faults are detected as the processor is decoding the instruction. 
-    // > These include instruction breakpoints (#DB), invalid opcode (#UD), 
-    // > instruction page fault (#PF) and device not available (#NM). 
-    // > These fault types do not allow *dispatch* of the current instruction
-    // > on which the fault is detected or any younger instruction.
-    //
     let test = emit_rdpmc_test_single!(0,
         ; mov rdi, QWORD scratch_ptr as _
         ; call ->func
@@ -108,10 +93,6 @@ fn main() -> Result<(), &'static str> {
 
     // Run a test where #GP stops speculation before reaching RDTSC.
     // You should see no LsRdTsc events.
-    //
-    // (Like #UD, we'd expect that #GP should also prevent any speculative 
-    // dispatch of younger instructions)
-    //
     let test = emit_rdpmc_test_single!(0,
         ; mov rdi, QWORD scratch_ptr as _
         ; call ->func

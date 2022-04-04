@@ -1,5 +1,6 @@
 //! PMC event definitions (for Zen 2).
 
+/// Some property that characterizes an event.
 pub enum EventProperty {
     Retired,
     Dispatched,
@@ -31,10 +32,12 @@ impl CounterUnit {
     }
 }
 
+/// A description of an event.
 pub struct EventDesc {
     pub desc: &'static str,
     pub unit: CounterUnit
 }
+
 
 /// [Event] is an 12-bit unsigned integer in the `PERF_CTL` MSRs.
 /// Each event may also be qualified by some unit mask (an 8-bit unsigned 
@@ -92,7 +95,13 @@ pub enum Event {
     /// PMCx0aa - "Source of Op Dispatched From Decoder"
     ///
     /// NOTE: This name is from "PPR Vol 1 for AMD Family 19h Model 01h B1"
-    /// (55898 Rev 0.50 - May 27, 2021).
+    /// (55898 Rev 0.50 - May 27, 2021). 
+    ///
+    /// Also, see errata #1287 in the 19h revision guide, which may be related. 
+    /// This does not seem to count correctly, or the behavior is simply not 
+    /// well-defined in the 17h PPRs. This seems to undercount when compared 
+    /// to PMC0xab.
+    ///
     DeSrcOpDisp(u8),
     OpCacheDispatched,
     DecoderDispatched,
@@ -105,9 +114,11 @@ pub enum Event {
     /// This seems like it also counts speculatively-dispatched ops.
     ///
     /// ## Unit Mask
-    /// 0x80 - 0=IBS count, 1=retire count
-    /// 0x08 - Any integer dispatch
-    /// 0x04 - Any FP dispatch
+    /// The PPR mentions that unit mask `0x08` selects dispatched integer 
+    /// ops, and unit mask `0x04` selects dispatched floating-point ops.
+    /// Masks `0x01` and `0x02` seem to further distinguish between different
+    /// types of integer ops - may be related to "fastpath"/microcoded ops?
+    ///
     DeDisOpsFromDecoder(u8),
 
     /// PMC0x0ae - "Dispatch Resource Stalls 1"
