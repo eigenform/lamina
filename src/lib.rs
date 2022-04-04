@@ -79,6 +79,8 @@ pub mod pmc;
 pub mod event;
 pub mod ctx;
 
+use std::iter::FromIterator;
+use std::collections::BTreeMap;
 pub use dynasmrt::{
     dynasm, 
     DynasmApi, 
@@ -99,12 +101,34 @@ pub struct PMCResults {
     pub event: [Option<event::Event>; 6],
     /// Sets of data for each event.
     pub data: [Option<Vec<usize>>; 6], 
+
+    pub min: [usize; 6],
+    pub max: [usize; 6],
+    pub map: [BTreeMap<usize, usize>; 6],
+
 }
 impl PMCResults {
     /// Create a new set of results.
     pub fn new(desc: &pmc::PerfCtlDescriptor) -> Self {
+        use std::mem::MaybeUninit;
         const DATA: Option<Vec<usize>> = None;
-        let mut res = Self { event: [None; 6], data: [DATA; 6] };
+
+        let maps: [BTreeMap<usize, usize>; 6] = unsafe {
+            let mut maps: [MaybeUninit<BTreeMap<usize,usize>>; 6] = {
+                MaybeUninit::uninit().assume_init()
+            };
+            for m in &mut maps {
+                m.write(BTreeMap::new()); 
+            }
+            std::mem::transmute(maps)
+        };
+        let mut res = Self { 
+            event: [None; 6], 
+            data: [DATA; 6],
+            min: [0; 6],
+            max: [0; 6],
+            map: maps,
+        };
         for idx in 0..6 {
             res.event[idx] = desc.events[idx];
             if let Some(_) = desc.events[idx] {
@@ -113,13 +137,20 @@ impl PMCResults {
         }
         res
     }
+
     pub fn print_ctr(&self, idx: usize) {
         assert!(idx < 6);
-        if let Some(data) = &self.data[idx] {
-            let evt = self.event[idx].unwrap();
-            let min = data.iter().min().unwrap();
-            let max = data.iter().max().unwrap();
-            println!("{:x?} min={} max={}", evt, min, max);
+        if let Some(event) = &self.event[idx] {
+            let mut dist = Vec::from_iter(&self.map[idx]);
+            dist.sort_by(|&(_, a), &(_,b)| b.cmp(&a));
+            let evt = format!("{:x?}", event);
+            //println!("| --------------------------------------------------");
+            println!("|  PMCx{:03x} [{}]", event.convert().0, evt);
+            //println!("|   Description:  {}", event.desc().desc);
+            //println!("|   Counter type: {}", event.desc().unit.to_str());
+            println!("|   min={:<5} max={:<5} mde={:<5} | dist={:?}",
+                self.min[idx], self.max[idx], dist[0].0, self.map[idx]
+            );
         }
     }
 }
@@ -153,6 +184,14 @@ impl PMCTest {
             }
         }
     }
+    pub fn print(&self) {
+        println!("# Test '{}'", self.name);
+        for (idx, e) in self.res.event.iter().enumerate() {
+            if e.is_some() {
+                self.res.print_ctr(idx);
+            }
+        }
+    }
 
     /// Run the emitted code once.
     pub fn run_once(&self) -> [usize; 6] { 
@@ -164,7 +203,6 @@ impl PMCTest {
     /// Run emitted code some number of times.
     pub fn run_iter(&mut self, iter: usize) {
         let mut res_vec = vec![[0usize;6]; iter];
-
         for i in 0..iter { 
             let mut res: [usize; 6] = [0; 6];
             util::clflush(self.size, self.ptr as *const [u8; 64]);
@@ -177,6 +215,20 @@ impl PMCTest {
                 if let Some(ref mut v) = self.res.data[idx] { 
                     v.push(res[idx]);
                 }
+            }
+        }
+
+        for idx in 0..6 {
+            if let Some(ref mut data) = self.res.data[idx] {
+                let mut map: BTreeMap<usize, usize> = BTreeMap::new();
+                for value in data.iter() {
+                    *map.entry(*value).or_insert(0) += 1;
+                }
+                let min = data.iter().min().unwrap();
+                let max = data.iter().max().unwrap();
+                self.res.map[idx] = map;
+                self.res.min[idx] = *min;
+                self.res.max[idx] = *max;
             }
         }
     }

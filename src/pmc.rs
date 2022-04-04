@@ -168,6 +168,11 @@ impl PerfCtl {
         res.set_unit_mask(e.1);
         res
     }
+    pub fn new_merge(en: bool) -> Self {
+        let mut res = Self(0);
+        res.set_en(en);
+        res
+    }
 
     pub fn clear(&mut self) { 
         self.0 = 0;

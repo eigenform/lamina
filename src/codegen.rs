@@ -179,46 +179,6 @@ macro_rules! emit_hwong_gadget_test {
     } }
 }
 
-/// Gadget for creating a speculated branch.
-///
-/// ## Prior Art
-/// This setup is more-or-less analogous to the one that Can Bölük discusses
-/// in this project[^1] and article[^2] about examining undefined x86_64 
-/// instructions with speculation and PMCs.
-///
-/// [^1]: github.com/can1357/haruspex
-/// [^2]: blog.can.ac/2021/03/22/speculating-x86-64-isa-with-one-weird-trick/
-///
-#[macro_export]
-macro_rules! emit_cboluk_gadget {
-    ($asm:ident, speculate($($speculate:tt)*), busy($($busy:tt)*)) => {
-        dynasm!($asm,
-            ; .align 64
-            ; call ->func
-
-            // Instructions in this block are only executed speculatively;
-            // returns from the preceeding CALL should never reach here.
-            $($speculate)*
-
-            // Do something to waste cycles (might not be necessary).
-            ; .align 64
-            ; ->func:
-            $($busy)*
-
-            // Fixup the return address, orphaning the speculate() block.
-            // Note that XCHG and SFENCE seem *necessary* here. 
-            ; lea rax, [->end]
-            ; xchg [rsp], rax
-            ; sfence
-            ; ret
-
-            // Actual return address.
-            ; .align 64
-            ; ->end:
-        );
-    }
-}
-
 
 /// Emit a test utilizing all six PMC registers to capture some result data.
 ///
@@ -273,8 +233,12 @@ macro_rules! emit_rdpmc_test_all {
             ; mov rcx, 0 ; lfence ; rdpmc ; lfence ; sub  r9, rax
         );
 
-        // Do something
-        $($body)*
+        // Do something.
+        // At this point, RAX, RCX, RDX, and R9-R14 have been used.
+
+        dynasm!(asm 
+            $($body)*
+        );
 
         // Take another set of measurements and compute the difference
         dynasm!(asm

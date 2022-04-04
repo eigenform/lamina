@@ -2,7 +2,7 @@
 
 Some tools for generating/playing with x64 microbenchmarks in user-space,
 and a kernel module for direct access to PMCs. This was written specifically
-for use on my Ryzen 7 3950X - assume that only Zen 2 machines are supported.
+for use on my Ryzen 9 3950X - assume that only Zen 2 machines are supported.
 
 ## Notes
 
