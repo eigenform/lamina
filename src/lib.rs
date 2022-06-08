@@ -79,8 +79,11 @@ pub mod pmc;
 pub mod event;
 pub mod ctx;
 
+use std::fs::File;
+use std::io::Write;
 use std::iter::FromIterator;
 use std::collections::BTreeMap;
+
 pub use dynasmrt::{
     dynasm, 
     DynasmApi, 
@@ -146,13 +149,30 @@ impl PMCResults {
             let evt = format!("{:x?}", event);
             //println!("| --------------------------------------------------");
             println!("|  PMCx{:03x} [{}]", event.convert().0, evt);
-            //println!("|   Description:  {}", event.desc().desc);
+            println!("|   Description:  {}", event.desc().desc);
             //println!("|   Counter type: {}", event.desc().unit.to_str());
-            println!("|   min={:<5} max={:<5} mde={:<5} | dist={:?}",
+            println!("|   min={:<5} max={:<5} mode={:<5} | dist={:?}",
                 self.min[idx], self.max[idx], dist[0].0, self.map[idx]
             );
         }
     }
+
+    /// Write raw result data to a text file
+    pub fn write_txt(&self, name: &'static str) {
+        let mut f = File::create(name).expect("cant create file");
+        for idx in 0..6 {
+            if let Some(event) = &self.event[idx] {
+                let data = if let Some(data) = &self.data[idx] {
+                    format!("{:?}", data)
+                } else { unreachable!() };
+                let line = format!("PMCx{:03x} {}|{}\n",
+                    event.convert().0, event.desc().desc, data
+                );
+                f.write(line.as_bytes()).unwrap();
+            }
+        }
+    }
+
 }
 
 /// Wrapper around emitted code that uses RDPMC to capture some data.
@@ -201,6 +221,8 @@ impl PMCTest {
     }
 
     /// Run emitted code some number of times.
+    ///
+    /// NOTE: This evicts code from the i-cache on each iteration.
     pub fn run_iter(&mut self, iter: usize) {
         let mut res_vec = vec![[0usize;6]; iter];
         for i in 0..iter { 

@@ -146,6 +146,8 @@ pub enum Event {
     ExRetBrn(u8),
     /// PMCx0c3 - "Retired Branch Instructions Mispredicted"
     ExRetBrnMisp(u8),
+    /// PMCx0c7 - "Retired Branch Resyncs"
+    ExRetBrnResync(u8),
     /// PMCx0c9 - "Retired Near Returns Mispredicted"
     ExRetNearRetMispred(u8),
     /// PMCx0ca - "Retired Indirect Branch Instructions Mispredicted"
@@ -277,6 +279,7 @@ impl Event {
             ExRetCops(m)                  => (0x00c1, *m),
             ExRetBrn(m)                   => (0x00c2, *m),
             ExRetBrnMisp(m)               => (0x00c3, *m),
+            ExRetBrnResync(m)             => (0x00c7, *m),
             ExRetNearRetMispred(m)        => (0x00c9, *m),
             ExRetBrnIndMisp(m)            => (0x00ca, *m),
         }
