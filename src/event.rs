@@ -83,6 +83,9 @@ pub enum Event {
     /// PMCx076 - "Cycles Not In Halt"
     LsNotHaltedCyc(u8),
 
+    /// PMCx082 - "Instruction Cache Refills from L2"
+    IcCacheFillL2(u8),
+
     /// PMCx08a - "L1 Branch Prediction Overrides Existing Prediction" (speculative)
     BpL1BTBCorrect(u8),
     /// PMCx08b - "L2 Branch Prediction Overrides Existing Prediction" (speculative)
@@ -91,6 +94,10 @@ pub enum Event {
     BpDynIndPred(u8),
     /// PMCx091 - "Decoder Overrides Existing Branch Prediction"
     BpDeReDirect(u8),
+
+    /// PMCx0a9 - "Micro-Op Queue Empty"
+    /// "Cycles where the micro-op queue is empty"
+    DeDisUopQueueEmpty(u8),
 
     /// PMCx0aa - "Source of Op Dispatched From Decoder"
     ///
@@ -162,26 +169,40 @@ impl Event {
         use CounterUnit::*;
         use EventProperty::*;
         match self {
+            IcCacheFillL2(_) => EventDesc {
+                desc: "Instruction Cache Refills from L2",
+                unit: UndefinedUnit,
+            },
+            LsNotHaltedCyc(_) => EventDesc { 
+                desc: "Cycles not in halt",
+                unit: ClockCycle,
+            },
+
             LsPrefInstrDisp(_) => EventDesc { 
                 desc: "Dispatched PREFETCH instructions (speculative)",
                 unit: Instruction(Dispatched),
             },
 
             BpL1BTBCorrect(_) => EventDesc {
-                desc: "Branch redirects from L1 BTB (speculative)",
+                desc: "L1 BTB Overrides Existing Prediction (speculative)",
                 unit: UndefinedUnit,
             },
             BpL2BTBCorrect(_) => EventDesc {
-                desc: "Branch redirects from L2 BTB (speculative)",
+                desc: "L2 BTB Overrides Existing Prediction (speculative)",
                 unit: UndefinedUnit,
             },
             BpDynIndPred(_) => EventDesc {
-                desc: "Dynamic indirect branch predictions",
+                desc: "Dynamic indirect branch predictions (speculative)",
                 unit: UndefinedUnit,
             },
             BpDeReDirect(_) => EventDesc {
-                desc: "Branch redirects from decoder",
+                desc: "Branch redirects from decoder (speculative)",
                 unit: UndefinedUnit,
+            },
+
+            DeDisUopQueueEmpty(_) => EventDesc {
+                desc: "Cycles where the micro-op queue is empty",
+                unit: ClockCycle,
             },
 
             DeDisOpsFromDecoder(_) => EventDesc {
@@ -249,11 +270,14 @@ impl Event {
             LsPrefInstrDisp(m)            => (0x004b, *m),
             LsNotHaltedCyc(m)             => (0x0076, *m),
 
+            IcCacheFillL2(m)              => (0x0082, *m),
+
             BpL1BTBCorrect(m)             => (0x008a, *m),
             BpL2BTBCorrect(m)             => (0x008b, *m),
             BpDynIndPred(m)               => (0x008e, *m),
             BpDeReDirect(m)               => (0x0091, *m),
 
+            DeDisUopQueueEmpty(m)         => (0x00a9, *m),
             DeSrcOpDisp(m)                => (0x00aa, *m),
             OpCacheDispatched             => (0x00aa, 0x02),
             DecoderDispatched             => (0x00aa, 0x01),

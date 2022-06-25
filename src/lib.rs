@@ -95,8 +95,21 @@ pub use dynasmrt::{
 };
 
 
-/// Function pointer to emitted code (using PMCs).
+/// Function pointer to emitted code which takes a pointer to an array of
+/// [usize] used to hold the results.
+///
+/// FIXME: You should make the typing here more explicit to indicate that
+/// we're passing a pointer to `[usize; 6]`.
 pub type PMCTestFn = extern "C" fn(*mut usize);
+
+
+/// Indicates the strategy used to obtain result values from emitted code.
+pub enum PMCTestInterface {
+    /// Emitted code stores 6 result values in some array. 
+    ByRef(extern "C" fn(*mut [usize; 6])),
+    /// Emitted code returns a single result value in RAX.
+    ByVal(extern "C" fn() -> usize),
+}
 
 /// A set of results collected from PMCs.
 pub struct PMCResults {
@@ -213,16 +226,18 @@ impl PMCTest {
         }
     }
 
-    /// Run the emitted code once.
-    pub fn run_once(&self) -> [usize; 6] { 
-        let mut res: [usize; 6] = [0; 6];
-        (self.func)(res.as_mut_ptr()); 
-        res
-    }
-
     /// Run emitted code some number of times.
     ///
-    /// NOTE: This evicts code from the i-cache on each iteration.
+    /// # Safety
+    /// This assumes that emitted code takes a pointer to an array of
+    /// six 64-bit elements and fills it with the values of the six PMC
+    /// counters (this is implicit in the definition of [PMCTestFn]. 
+    ///
+    /// Right now the only gadget satisfying this should be the 
+    /// [emit_rdpmc_test_all] macro.
+    ///
+    /// Also note that this evicts code from the i-cache on each iteration.
+    ///
     pub fn run_iter(&mut self, iter: usize) {
         let mut res_vec = vec![[0usize;6]; iter];
         for i in 0..iter { 

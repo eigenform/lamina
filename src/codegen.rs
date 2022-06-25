@@ -281,6 +281,11 @@ macro_rules! emit_rdpmc_test_all {
 /// Emit a test utilizing a single counter to capture a single event.
 ///
 /// Returns the difference (number of events counted) in RAX.
+///
+/// NOTE: This is unusable right now because [PMCTest] (and implicitly,
+/// [PMCTestFn] assume that emitted code writes all six counters to some
+/// array given by a pointer.
+///
 #[macro_export]
 macro_rules! emit_rdpmc_test_single {
     ($ctr:expr, $($body:tt)*) => { {
